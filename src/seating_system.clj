@@ -3,8 +3,6 @@
             [lambdaisland.deep-diff2 :as ddiff]
             [clojure.string :as str]))
 
-
-;; The seat layout fits neatly on a grid. Each position is either floor (.), an empty seat (L), or an occupied seat (#). For example, the initial seat layout might look like this:
 (def symbol->space
   {"." :floor
    "L" :empty-seat
