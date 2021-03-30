@@ -1,0 +1,2 @@
+{:paths ["src" "resources"]
+ :deps  {lambdaisland/deep-diff2 {:mvn/version "2.0.108"}}}
