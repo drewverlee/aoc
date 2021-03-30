@@ -40,7 +40,7 @@
    :adjacent-spaces (map #(get-in grid %) (loc->adjacent-locs loc))})
 
 ;; --------------- SEATING RULES START ---------------------
-;;If a seat is empty and there are no occupied seats adjacent to it, the seat becomes occupied.
+;;If a seat (space) is empty and there are no occupied seats adjacent to it, the seat becomes occupied.
 (defn is-empty-and-adjacent-empty?
   [{:keys [space adjacent-spaces]}]
   (let [is-space-empty? (fn
@@ -52,7 +52,7 @@
                             (= :empty-seat space)))]
     (every? is-space-empty?  (conj adjacent-spaces space))))
 
-;; If a seat is occupied and four or more seats adjacent to it are also occupied, the seat becomes empty.
+;; If a seat (space) is occupied and four or more seats adjacent to it are also occupied, the seat becomes empty.
 (defn is-occupied-and-four-occupied?
   [{:keys [space adjacent-spaces]}]
   (and
