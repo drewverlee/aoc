@@ -34,13 +34,13 @@
     [(inc row-idx) (dec col-idx)]
     [(dec row-idx) (inc col-idx)]})
 
-;; --------------- SEATING RULES START ---------------------
-;;If a seat is empty and there are no occupied seats adjacent to it, the seat becomes occupied.
 (defn loc+grid->spaces
   [loc grid]
   {:space           (get-in grid loc)
    :adjacent-spaces (map #(get-in grid %) (loc->adjacent-locs loc))})
 
+;; --------------- SEATING RULES START ---------------------
+;;If a seat is empty and there are no occupied seats adjacent to it, the seat becomes occupied.
 (defn is-empty-and-adjacent-empty?
   [{:keys [space adjacent-spaces]}]
   (let [is-space-empty? (fn
