@@ -4,7 +4,6 @@
             [clojure.string :as str]))
 
 
-
 ;; The seat layout fits neatly on a grid. Each position is either floor (.), an empty seat (L), or an occupied seat (#). For example, the initial seat layout might look like this:
 (def symbol->space
   {"." :floor
@@ -26,19 +25,6 @@
                   ) row)))
       [])))
 
-(defn reverse-hash-map
-  [m]
-  (into {} (map (fn [[k v]] [v k]) m)))
-
-(defn is-space-empty?
-  [space]
-  (or
-    ;;TODO resolve is a floor seat next to you considered empty
-    (= :floor space)
-    ;; because we access index's out of bounds
-    (nil? space)
-    (= :empty-seat space)))
-
 (defn loc->adjacent-locs
   [[row-idx col-idx]]
   #{[(inc row-idx) col-idx]
@@ -50,39 +36,42 @@
     [(inc row-idx) (dec col-idx)]
     [(dec row-idx) (inc col-idx)]})
 
+;; --------------- SEATING RULES START ---------------------
 ;;If a seat is empty and there are no occupied seats adjacent to it, the seat becomes occupied.
-(defn is-empty-and-adjacent-empty?
+(defn loc+grid->spaces
   [loc grid]
-  (let [adjacent-locs   (loc->adjacent-locs loc)
-        space           (get-in grid loc)
-        adjacent-spaces (map #(get-in grid %) adjacent-locs)]
+  {:space           (get-in grid loc)
+   :adjacent-spaces (map #(get-in grid %) (loc->adjacent-locs loc))})
+
+(defn is-empty-and-adjacent-empty?
+  [{:keys [space adjacent-spaces]}]
+  (let [is-space-empty? (fn
+                          [space]
+                          (or
+                            (= :floor space)
+                            ;; checking nil, because we access index's out of bounds and they have to count as empty.
+                            (nil? space)
+                            (= :empty-seat space)))]
     (every? is-space-empty?  (conj adjacent-spaces space))))
 
 ;; If a seat is occupied and four or more seats adjacent to it are also occupied, the seat becomes empty.
 (defn is-occupied-and-four-occupied?
-  [loc grid]
-  (let [adjacent-locs   (loc->adjacent-locs loc)
-        space           (get-in grid loc)
-        adjacent-spaces (map #(get-in grid %) adjacent-locs)]
-    (and
-      (= :occupied-seat space)
-      (-> adjacent-spaces
-        frequencies
-        (get :occupied-seat 0)
-        (>= 4)))))
-
-
-(defn loc->adjacent-spaces
-  [loc grid]
-  (map #(get-in grid %) (loc->adjacent-locs loc)))
+  [{:keys [space adjacent-spaces]}]
+  (and
+    (= :occupied-seat space)
+    (-> adjacent-spaces
+      frequencies
+      (get :occupied-seat 0)
+      (>= 4))))
+;; --------------- SEATING RULES END ---------------------
 
 (defn loc+grid->new-space
-  [loc grid]
+  [{:keys [space] :as spaces}]
   (cond
-    (= :floor (get-in grid loc))              :floor
-    (is-empty-and-adjacent-empty? loc grid)   :occupied-seat
-    (is-occupied-and-four-occupied? loc grid) :empty-seat
-    :else                                     (get-in grid loc)))
+    (= :floor space)                        :floor
+    (is-empty-and-adjacent-empty? spaces)   :occupied-seat
+    (is-occupied-and-four-occupied? spaces) :empty-seat
+    :else                                   space))
 
 (defn grid->next-grid
   [grid]
@@ -91,7 +80,9 @@
       (conj new-grid
         (reduce-kv
           (fn [new-row col-idx _]
-            (conj new-row (loc+grid->new-space [row-idx col-idx] grid)))
+            (conj new-row (->> grid
+                            (loc+grid->spaces [row-idx col-idx])
+                            loc+grid->new-space)))
           []
           row)))
     []
@@ -102,71 +93,67 @@
   (let [grid         (last log)
         next-grid    (grid->next-grid grid)
         new-grid-log (conj log next-grid)]
-    (if (=  next-grid grid)
+    (if (= next-grid grid)
       log
       (grid->grid-log new-grid-log))))
 
-(
- comment
+(defn grid->final-grid
+  [grid]
+  (->> [grid]
+    grid->grid-log
+    last))
 
- (def example-output-grids 
-   (->> "seating-chart-output.txt"
-     io/resource
-     slurp
-     str/split-lines
-     (mapv (fn [a-row-of-seating] (str/split a-row-of-seating #"")))
-     (partition-by #(= [""] %))
-     (remove #(= [[""]] %))
-     (map (fn [symbols] 
-            (reduce
-              (fn [grid row]
-                (conj grid
-                  (mapv (fn [symbol]
-                          (symbol->space symbol)
-                          ) row)))
-              []
-              symbols)))))
+(defn grid->occupied-count
+  [grid]
+  (->> grid
+    flatten
+    frequencies
+    :occupied-seat))
 
- (def init-grid (spaces-chart-file->spaces-grid "seating-chart-example.txt"))
+(comment
 
- (def current-output (grid->grid-log [init-grid]) )
+  (let [expected-grid-log
+        (->> "seating-chart-output.txt"
+          io/resource
+          slurp
+          str/split-lines
+          (mapv (fn [a-row-of-seating] (str/split a-row-of-seating #"")))
+          (partition-by #(= [""] %))
+          (remove #(= [[""]] %))
+          (map (fn [symbols]
+                 (reduce
+                   (fn [grid row]
+                     (conj grid
+                       (mapv (fn [symbol]
+                               (symbol->space symbol)
+                               ) row)))
+                   []
+                   symbols))))
 
- (let [loc             [0 2]
-       grid            (nth current-output 1)
-       space           (get-in grid loc)
-       adjacent-spaces (loc->adjacent-spaces loc grid)]
-   (loc+grid->new-space loc grid)) 
+        ;; ---------- START HERE! ---------
+        ;; Goal is to find the number of occupied spaces in a seating-chart, which we call a grid.
+        ;; To do this a were given an `example-init-grid`
 
- (ddiff/pretty-print (ddiff/diff (nth current-output 2) (nth example-output-grids 2)  ))
+        example-init-grid (spaces-chart-file->spaces-grid "seating-chart-example.txt")
 
- (= current-output example-output-grids  );; => true
-
-
- (defn log->occupied-count
-   [log]
-   (->> log
-     last
-     flatten
-     frequencies
-     :occupied-seat));; => 37
+        ;; and we create a grid and then get the occupied count.
+        example-occupied-count (->> example-init-grid
+                                 grid->final-grid
+                                 grid->occupied-count)]
 
 
- (log->occupied-count current-output);; => 37
-
- (vector [])
-
- (->> "seating-chart-input.txt"
-   spaces-chart-file->spaces-grid
-   vector
-   grid->grid-log
-   log->occupied-count);; => 2238
+    ;; which in the example should be  equal to 37
+    (= example-occupied-count 37)
 
 
 
+    ;; ----------- HELPFUL DEBUG INFO ---------------------
+    ;; 1. `seating-chart-output` is the grid log output that should be produced.
+    ;; 2. diff library to inspect differences in deeply nested data structures
 
- )
 
+    ;; a way to inspect how the structures diff, check repl
+    #_(ddiff/pretty-print (ddiff/diff expected-grid-log example-grid-log))
+    )
 
-;; At this point, something interesting happens: the chaos stabilizes and further applications of these rules cause no seats to change state! Once people stop moving around, you count 37 occupied seats.
-
-;; Simulate your seating area by applying the seating rules repeatedly until no seats change state. How many seats end up occupied?
+  )
